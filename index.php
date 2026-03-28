@@ -117,6 +117,5 @@ if ($config['ui']['selfie_mode']) {
     })();
 </script>
 <?php endif; ?>
-<script src="resources/js/payment_poll.js"></script>
 </body>
 </html>
