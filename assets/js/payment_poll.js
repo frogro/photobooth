@@ -15,6 +15,10 @@
                     if (data.paid && data.printed) {
                         stopPolling();
 
+                        if (typeof photoboothTools !== 'undefined') {
+                            photoboothTools.isPrinting = false;
+                        }
+
                         const overlay = document.querySelector('.overlay');
                         if (overlay) {
                             overlay.innerHTML = '✅ Zahlung erfolgreich – Druck abgeschlossen';
@@ -45,7 +49,11 @@
             return;
         }
 
-        if (overlay.classList.contains('overlay-qr') || overlay.classList.contains('overlay-both')) {
+        if (
+            overlay.classList.contains('overlay-qr') ||
+            overlay.classList.contains('overlay-both') ||
+            overlay.classList.contains('overlay-coin')
+        ) {
             startPolling();
         }
     });

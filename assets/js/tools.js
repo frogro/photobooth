@@ -592,17 +592,21 @@ const photoboothTools = (function () {
                     [csrf.key]: csrf.token
                 },
                 success: (data) => {
+                console.log("DEBUG: AJAX SUCCESS", data);
+
                     api.console.log('Picture processed: ', data);
 
                     if (data.status == 'locking') {
                         api.overlay.showWarning(
                             config.print.locking_msg + ' (' + api.getTranslation('printed') + ' ' + data.count + ')'
                         );
-                        api.resetPrintErrorMessage(cb, config.print.time);
+                        console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, config.print.time);
                         $('.print-unlock-button').removeClass('hidden');
                     } else if (data.status == 'queued') {
                         api.overlay.showWarning(api.getTranslation('print_queued'));
-                        api.resetPrintErrorMessage(cb, 2000);
+                        console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, 2000);
                     } else if (data.status == 'error') {
                         if (data.error) {
                             api.console.log('ERROR: An error occurred: ', data.error);
@@ -611,7 +615,8 @@ const photoboothTools = (function () {
                             api.console.log('ERROR: An error occurred on print.');
                             api.overlay.showError(api.getTranslation('error'));
                         }
-                        api.resetPrintErrorMessage(cb, config.print.time);
+                        console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, config.print.time);
                     } else {
                         setTimeout(function () {
                             api.overlay.close();
@@ -623,13 +628,20 @@ const photoboothTools = (function () {
                 error: (jqXHR, textStatus) => {
                     api.console.log('ERROR: Print failed: ', textStatus);
                     api.overlay.showError(api.getTranslation('error'));
-                    api.resetPrintErrorMessage(cb, notificationTimeout);
+                    console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, notificationTimeout);
                 }
             });
         }
     };
 
     api.printPayment = function (imageSrc, copies, cb) {
+        console.log("DEBUG: printPayment START", imageSrc, copies, "isPrinting:", api.isPrinting);
+
+        if (api.isPrinting) {
+            return;
+        }
+
         const priceCents = Number(config.payments?.price_cents || 0);
         const priceEuro = (priceCents / 100).toFixed(2).replace('.', ',');
         const paymentMessage = (config.payments?.message || api.getTranslation('payments_message')).replace(
@@ -651,6 +663,8 @@ const photoboothTools = (function () {
             dataType: 'json',
             data: api.addCsrfToPayload({ filename: imageSrc, copies: copies }),
             success: (data) => {
+                console.log("DEBUG: AJAX SUCCESS", data);
+
                 if (data.status === 'disabled') {
                     api.overlay.close();
                     api.isPrinting = false;
@@ -662,10 +676,26 @@ const photoboothTools = (function () {
                         api.isPrinting = false;
                         api.printImage(imageSrc, copies, cb);
                     }, 1200);
+                } else if (data.status === 'coin') {
+                    console.log("DEBUG: COIN BRANCH ENTERED");
+
+                    const overlay = document.querySelector('.overlay');
+
+                    api.overlay.show(`
+                        <div style="text-align:center;">
+                            <div style="font-size:1.4em; margin-bottom:12px;">${paymentMessage}</div>
+                            <div style="margin-bottom:10px;">Bitte Geld einwerfen.</div>
+                        </div>
+                    `);
+                    if (overlay) {
+                        overlay.classList.remove('overlay-both', 'overlay-qr', 'overlay-coin');
+                        overlay.classList.add('overlay-coin');
+                    }
                 } else if (data.status === 'qr' || data.status === 'both') {
                     if (!data.payment_url) {
                         api.overlay.showError(api.getTranslation('payments_url_missing'));
-                        api.resetPrintErrorMessage(cb, notificationTimeout);
+                        console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, notificationTimeout);
                         return;
                     }
                     const qrUrl =
@@ -685,16 +715,23 @@ const photoboothTools = (function () {
                             ${data.status === 'both' ? `<div style="margin-top:12px;">${paymentTerminalMsg}</div>` : ''}
                         </div>
                     `);
-                    api.isPrinting = false;
-                    overlay.classList.remove('overlay-both', 'overlay-qr');
-                    overlay.classList.add(statusClass);
+                    if (overlay) {
+                        overlay.classList.remove('overlay-both', 'overlay-qr', 'overlay-coin');
+                        overlay.classList.add(statusClass);
+                    }
                 } else {
+                    console.log("DEBUG: FALLBACK ERROR BRANCH", data);
                     api.overlay.showError(data.error || api.getTranslation('payments_failed'));
-                    api.resetPrintErrorMessage(cb, notificationTimeout);
+
+                    console.log("DEBUG: resetPrintErrorMessage CALLED");
+                api.resetPrintErrorMessage(cb, notificationTimeout);
                 }
             },
             error: () => {
+                console.log("DEBUG: AJAX ERROR");
+
                 api.overlay.showError(api.getTranslation('payments_error'));
+                console.log("DEBUG: resetPrintErrorMessage CALLED");
                 api.resetPrintErrorMessage(cb, notificationTimeout);
             }
         });
