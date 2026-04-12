@@ -25,7 +25,7 @@ WEBBROWSER="unknown"
 GIT_INSTALLED=false
 GIT_REPO_URL="https://github.com/frogro/photobooth.git"
 GIT_REMOTE_NAME="origin"
-BRANCH="feature/sumup-payment"
+BRANCH="sumup-coin"
 REMOTE_BRANCH_API=""
 REMOTE_BRANCH_SHA=""
 
