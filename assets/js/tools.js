@@ -592,21 +592,17 @@ const photoboothTools = (function () {
                     [csrf.key]: csrf.token
                 },
                 success: (data) => {
-                console.log("DEBUG: AJAX SUCCESS", data);
-
                     api.console.log('Picture processed: ', data);
 
                     if (data.status == 'locking') {
                         api.overlay.showWarning(
                             config.print.locking_msg + ' (' + api.getTranslation('printed') + ' ' + data.count + ')'
                         );
-                        console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, config.print.time);
+                        api.resetPrintErrorMessage(cb, config.print.time);
                         $('.print-unlock-button').removeClass('hidden');
                     } else if (data.status == 'queued') {
                         api.overlay.showWarning(api.getTranslation('print_queued'));
-                        console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, 2000);
+                        api.resetPrintErrorMessage(cb, 2000);
                     } else if (data.status == 'error') {
                         if (data.error) {
                             api.console.log('ERROR: An error occurred: ', data.error);
@@ -615,8 +611,7 @@ const photoboothTools = (function () {
                             api.console.log('ERROR: An error occurred on print.');
                             api.overlay.showError(api.getTranslation('error'));
                         }
-                        console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, config.print.time);
+                        api.resetPrintErrorMessage(cb, config.print.time);
                     } else {
                         setTimeout(function () {
                             api.overlay.close();
@@ -628,20 +623,13 @@ const photoboothTools = (function () {
                 error: (jqXHR, textStatus) => {
                     api.console.log('ERROR: Print failed: ', textStatus);
                     api.overlay.showError(api.getTranslation('error'));
-                    console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, notificationTimeout);
+                    api.resetPrintErrorMessage(cb, notificationTimeout);
                 }
             });
         }
     };
 
     api.printPayment = function (imageSrc, copies, cb) {
-        console.log("DEBUG: printPayment START", imageSrc, copies, "isPrinting:", api.isPrinting);
-
-        if (api.isPrinting) {
-            return;
-        }
-
         const priceCents = Number(config.payments?.price_cents || 0);
         const priceEuro = (priceCents / 100).toFixed(2).replace('.', ',');
         const paymentMessage = (config.payments?.message || api.getTranslation('payments_message')).replace(
@@ -663,8 +651,6 @@ const photoboothTools = (function () {
             dataType: 'json',
             data: api.addCsrfToPayload({ filename: imageSrc, copies: copies }),
             success: (data) => {
-                console.log("DEBUG: AJAX SUCCESS", data);
-
                 if (data.status === 'disabled') {
                     api.overlay.close();
                     api.isPrinting = false;
@@ -676,62 +662,89 @@ const photoboothTools = (function () {
                         api.isPrinting = false;
                         api.printImage(imageSrc, copies, cb);
                     }, 1200);
-                } else if (data.status === 'coin') {
-                    console.log("DEBUG: COIN BRANCH ENTERED");
-
+                } else if (data.status === 'coin' || data.status === 'qr' || data.status === 'both') {
                     const overlay = document.querySelector('.overlay');
+                    const mode = data.payment_mode || '';
+                    const qrUrl = data.payment_url
+                        ? 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' +
+                          encodeURIComponent(data.payment_url)
+                        : '';
 
-                    api.overlay.show(`
-                        <div style="text-align:center;">
-                            <div style="font-size:1.4em; margin-bottom:12px;">${paymentMessage}</div>
-                            <div style="margin-bottom:10px;">Bitte Geld einwerfen.</div>
-                        </div>
-                    `);
-                    if (overlay) {
-                        overlay.classList.remove('overlay-both', 'overlay-qr', 'overlay-coin');
-                        overlay.classList.add('overlay-coin');
+                    let text = '';
+                    let className = 'overlay-qr';
+                    let extra = '';
+
+                    switch (mode) {
+                        case 'coin':
+                            text = api.getTranslation('payments_coin_message');
+                            className = 'overlay-coin';
+                            break;
+                        case 'terminal_coin':
+                            text = api.getTranslation('payments_terminal_coin_message');
+                            className = 'overlay-coin';
+                            extra = `<div style="margin-top:12px;">${paymentTerminalMsg}</div>
+                                     <div style="margin-top:8px; font-size:0.95em;">${api.getTranslation('payments_multi_hint')}</div>`;
+                            break;
+                        case 'qr_coin':
+                            text = api.getTranslation('payments_qr_coin_message');
+                            className = 'overlay-qr';
+                            extra = `<div style="margin-top:8px; font-size:0.95em;">${api.getTranslation('payments_multi_hint')}</div>`;
+                            break;
+                        case 'terminal_qr':
+                            text = api.getTranslation('payments_terminal_qr_message');
+                            className = 'overlay-both';
+                            extra = `<div style="margin-top:12px;">${paymentTerminalMsg}</div>`;
+                            break;
+                        case 'terminal_qr_coin':
+                            text = api.getTranslation('payments_terminal_qr_coin_message');
+                            className = 'overlay-both';
+                            extra = `<div style="margin-top:12px;">${paymentTerminalMsg}</div>
+                                     <div style="margin-top:8px; font-size:0.95em;">${api.getTranslation('payments_multi_hint')}</div>`;
+                            break;
+                        case 'qr':
+                            text = api.getTranslation('payments_qr_message');
+                            className = 'overlay-qr';
+                            break;
+                        default:
+                            if (data.status === 'coin') {
+                                text = api.getTranslation('payments_coin_message');
+                                className = 'overlay-coin';
+                            } else if (data.status === 'both') {
+                                text = api.getTranslation('payments_terminal_qr_message');
+                                className = 'overlay-both';
+                                extra = `<div style="margin-top:12px;">${paymentTerminalMsg}</div>`;
+                            } else {
+                                text = api.getTranslation('payments_qr_message');
+                                className = 'overlay-qr';
+                            }
                     }
-                } else if (data.status === 'qr' || data.status === 'both') {
-                    if (!data.payment_url) {
+
+                    if ((data.status === 'qr' || data.status === 'both') && !qrUrl) {
                         api.overlay.showError(api.getTranslation('payments_url_missing'));
-                        console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, notificationTimeout);
+                        api.resetPrintErrorMessage(cb, notificationTimeout);
                         return;
                     }
-                    const qrUrl =
-                        'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=' +
-                        encodeURIComponent(data.payment_url);
-                    const statusClass = {
-                        both: 'overlay-both',
-                        qr: 'overlay-qr'
-                    }[data.status];
-                    const overlay = document.querySelector('.overlay');
 
                     api.overlay.show(`
                         <div style="text-align:center;">
                             <div style="font-size:1.4em; margin-bottom:12px;">${paymentMessage}</div>
-                            <div style="margin-bottom:10px;">${paymentQrMsg}</div>
-                            <img src="${qrUrl}" alt="QR Code" style="max-width:300px; width:80%; height:auto; background:#fff; padding:10px; border-radius:12px;">
-                            ${data.status === 'both' ? `<div style="margin-top:12px;">${paymentTerminalMsg}</div>` : ''}
+                            <div style="margin-bottom:10px;">${text}</div>
+                            ${qrUrl ? `<img src="${qrUrl}" alt="QR Code" style="max-width:300px; width:80%; height:auto; background:#fff; padding:10px; border-radius:12px;">` : ''}
+                            ${extra}
                         </div>
                     `);
+                    api.isPrinting = false;
                     if (overlay) {
                         overlay.classList.remove('overlay-both', 'overlay-qr', 'overlay-coin');
-                        overlay.classList.add(statusClass);
+                        overlay.classList.add(className);
                     }
                 } else {
-                    console.log("DEBUG: FALLBACK ERROR BRANCH", data);
                     api.overlay.showError(data.error || api.getTranslation('payments_failed'));
-
-                    console.log("DEBUG: resetPrintErrorMessage CALLED");
-                api.resetPrintErrorMessage(cb, notificationTimeout);
+                    api.resetPrintErrorMessage(cb, notificationTimeout);
                 }
             },
             error: () => {
-                console.log("DEBUG: AJAX ERROR");
-
                 api.overlay.showError(api.getTranslation('payments_error'));
-                console.log("DEBUG: resetPrintErrorMessage CALLED");
                 api.resetPrintErrorMessage(cb, notificationTimeout);
             }
         });
