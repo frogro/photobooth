@@ -100,16 +100,49 @@ try {
         exit;
     }
 
-    if ($paymentMode === 'coin') {
-        if (!in_array($provider, ['coin', 'sumup_coin'], true)) {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'Payment provider does not allow coin mode',
-            ]);
-            exit;
-        }
+    $allowedModes = ['terminal', 'qr', 'terminal_qr', 'coin', 'terminal_coin', 'qr_coin', 'terminal_qr_coin'];
+    if (!in_array($paymentMode, $allowedModes, true)) {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment mode not yet implemented',
+        ]);
+        exit;
+    }
 
+    $usesCoin = in_array($paymentMode, ['coin', 'terminal_coin', 'qr_coin', 'terminal_qr_coin'], true);
+    $usesQr = in_array($paymentMode, ['qr', 'terminal_qr', 'qr_coin', 'terminal_qr_coin'], true);
+    $usesTerminal = in_array($paymentMode, ['terminal', 'terminal_qr', 'terminal_coin', 'terminal_qr_coin'], true);
+    $terminalSynchronous = ($paymentMode === 'terminal');
+
+    if ($usesCoin && !in_array($provider, ['coin', 'sumup_coin'], true)) {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment provider does not allow coin mode',
+        ]);
+        exit;
+    }
+
+    if (($usesQr || $usesTerminal) && !in_array($provider, ['sumup', 'sumup_coin'], true)) {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment provider is not compatible with SumUp mode',
+        ]);
+        exit;
+    }
+
+    if (($usesQr || $usesTerminal) && $merchantCode === '') {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'SumUp Merchant Code missing',
+        ]);
+        exit;
+    }
+
+    if ($usesCoin) {
         if ($coinPicoUrl === '') {
             http_response_code(500);
             echo json_encode([
@@ -127,7 +160,65 @@ try {
             ]);
             exit;
         }
+    }
 
+    if ($usesTerminal) {
+        if ($readerId === '') {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'SumUp Reader ID missing',
+            ]);
+            exit;
+        }
+
+        if ($affiliateKey === '') {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'SumUp Affiliate Key missing',
+            ]);
+            exit;
+        }
+
+        if (!is_file($soloScript)) {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'sumup_solo.py not found',
+            ]);
+            exit;
+        }
+    }
+
+    if ($usesQr) {
+        if ($webhookUrl === '') {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'ngrok URL / webhook_url missing',
+            ]);
+            exit;
+        }
+
+        if (!is_file($checkoutScript)) {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'create_checkout.py not found',
+            ]);
+            exit;
+        }
+    }
+
+    $writeJob = static function (
+        string $jobFile,
+        string $filename,
+        int $copies,
+        string $provider,
+        string $paymentMode,
+        int $amountCents
+    ): int|false {
         $jobData = json_encode([
             'filename' => $filename,
             'copies' => $copies,
@@ -135,14 +226,100 @@ try {
             'paid' => false,
             'provider' => $provider,
             'payment_mode' => $paymentMode,
-            'payment_channel' => 'coin',
+            'payment_channel' => $paymentMode,
             'amount_cents_due' => $amountCents,
             'amount_cents_received' => 0,
             'created_at' => date('c'),
         ], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
 
-        $jobWriteResult = file_put_contents($jobFile, $jobData);
+        return file_put_contents($jobFile, $jobData);
+    };
 
+    $writeLog = static function (string $logFile, array $lines): void {
+        file_put_contents($logFile, implode(PHP_EOL, $lines) . PHP_EOL . PHP_EOL, FILE_APPEND);
+    };
+
+    // Pure terminal mode keeps the old synchronous behaviour.
+    if ($terminalSynchronous) {
+        $cmd = escapeshellcmd($python) . ' ' .
+            escapeshellarg($soloScript) . ' ' .
+            escapeshellarg($merchantCode) . ' ' .
+            escapeshellarg($readerId) . ' ' .
+            escapeshellarg($affiliateKey) . ' ' .
+            escapeshellarg((string)$amountCents) . ' 2>&1';
+
+        $output = [];
+        $returnVar = 1;
+        exec($cmd, $output, $returnVar);
+
+        $logLines[] = 'command=' . $cmd;
+        $logLines[] = 'return_code=' . $returnVar;
+        $logLines[] = 'output:';
+        $logLines[] = implode(PHP_EOL, $output);
+
+        $writeLog($logFile, $logLines);
+
+        if ($returnVar === 0) {
+            echo json_encode([
+                'status' => 'success',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'message' => 'Payment successful - printing starts...',
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment failed or was cancelled',
+            'log' => implode("\n", $output),
+        ]);
+        exit;
+    }
+
+    $jobWriteResult = $writeJob($jobFile, $filename, $copies, $provider, $paymentMode, $amountCents);
+    $logLines[] = 'job_file=' . $jobFile;
+    $logLines[] = 'job_write_result=' . var_export($jobWriteResult, true);
+
+    $paymentUrl = '';
+
+    if ($usesQr) {
+        $returnUrl = $webhookUrl . '/sumup/webhook';
+
+        $checkoutCmd = escapeshellcmd($python) . ' ' .
+            escapeshellarg($checkoutScript) . ' ' .
+            escapeshellarg($merchantCode) . ' ' .
+            escapeshellarg((string)$amountCents) . ' ' .
+            escapeshellarg($returnUrl) . ' 2>&1';
+
+        $checkoutOutput = [];
+        $checkoutReturnVar = 1;
+        exec($checkoutCmd, $checkoutOutput, $checkoutReturnVar);
+
+        if (!empty($checkoutOutput)) {
+            $paymentUrl = trim(end($checkoutOutput));
+        }
+
+        $logLines[] = 'checkout_command=' . $checkoutCmd;
+        $logLines[] = 'checkout_return_code=' . $checkoutReturnVar;
+        $logLines[] = 'checkout_output:';
+        $logLines[] = implode(PHP_EOL, $checkoutOutput);
+        $logLines[] = 'payment_url=' . $paymentUrl;
+
+        if ($checkoutReturnVar !== 0 || $paymentUrl === '' || strpos($paymentUrl, 'https://') !== 0) {
+            $writeLog($logFile, $logLines);
+
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'The QR payment link could not be generated.',
+                'log' => implode("\n", $checkoutOutput),
+            ]);
+            exit;
+        }
+    }
+
+    if ($usesCoin) {
         $coinPayload = json_encode([
             'secret' => $coinSecret,
             'amount_cents' => $amountCents,
@@ -163,16 +340,14 @@ try {
         $httpStatusLine = $http_response_header[0] ?? '';
         $coinStartOk = is_string($httpStatusLine) && preg_match('/\s2\d\d\s/', $httpStatusLine) === 1;
 
-        $logLines[] = 'job_file=' . $jobFile;
-        $logLines[] = 'job_write_result=' . var_export($jobWriteResult, true);
         $logLines[] = 'coin_request_url=' . $coinPicoUrl;
         $logLines[] = 'coin_request_payload=' . $coinPayload;
         $logLines[] = 'coin_response_status=' . $httpStatusLine;
         $logLines[] = 'coin_response_body=' . (is_string($coinResponse) ? $coinResponse : '');
 
-        file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL . PHP_EOL, FILE_APPEND);
-
         if (!$coinStartOk) {
+            $writeLog($logFile, $logLines);
+
             http_response_code(500);
             echo json_encode([
                 'status' => 'error',
@@ -181,211 +356,9 @@ try {
             ]);
             exit;
         }
-
-        echo json_encode([
-            'status' => 'coin',
-            'message' => 'Coin payment ready',
-        ]);
-        exit;
     }
 
-    if (!in_array($paymentMode, ['terminal', 'qr', 'terminal_qr'], true)) {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'error' => 'Payment mode not yet implemented',
-        ]);
-        exit;
-    }
-
-    if ($provider !== 'sumup' && $provider !== 'sumup_coin') {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'error' => 'Payment provider is not compatible with SumUp mode',
-        ]);
-        exit;
-    }
-
-    if ($merchantCode === '') {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'error' => 'SumUp Merchant Code missing',
-        ]);
-        exit;
-    }
-
-    if ($paymentMode === 'terminal') {
-        if ($readerId === '') {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'SumUp Reader ID missing',
-            ]);
-            exit;
-        }
-
-        if ($affiliateKey === '') {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'SumUp Affiliate Key missing',
-            ]);
-            exit;
-        }
-
-        if (!is_file($soloScript)) {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'sumup_solo.py not found',
-            ]);
-            exit;
-        }
-
-        $cmd = escapeshellcmd($python) . ' ' .
-            escapeshellarg($soloScript) . ' ' .
-            escapeshellarg($merchantCode) . ' ' .
-            escapeshellarg($readerId) . ' ' .
-            escapeshellarg($affiliateKey) . ' ' .
-            escapeshellarg((string)$amountCents) . ' 2>&1';
-
-        $output = [];
-        $returnVar = 1;
-        exec($cmd, $output, $returnVar);
-
-        $logLines[] = 'command=' . $cmd;
-        $logLines[] = 'return_code=' . $returnVar;
-        $logLines[] = 'output:';
-        $logLines[] = implode(PHP_EOL, $output);
-        $logLines[] = '';
-
-        file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL, FILE_APPEND);
-
-        if ($returnVar === 0) {
-            echo json_encode([
-                'status' => 'success',
-                'message' => 'Payment successful - printing starts...',
-            ]);
-            exit;
-        }
-
-        echo json_encode([
-            'status' => 'error',
-            'error' => 'Payment failed or was cancelled',
-            'log' => implode("\n", $output),
-        ]);
-        exit;
-    }
-
-    if ($paymentMode === 'qr' || $paymentMode === 'terminal_qr') {
-        if ($webhookUrl === '') {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'ngrok URL / webhook_url missing',
-            ]);
-            exit;
-        }
-
-        if (!is_file($checkoutScript)) {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'create_checkout.py not found',
-            ]);
-            exit;
-        }
-
-        $returnUrl = $webhookUrl . '/sumup/webhook';
-
-        $checkoutCmd = escapeshellcmd($python) . ' ' .
-            escapeshellarg($checkoutScript) . ' ' .
-            escapeshellarg($merchantCode) . ' ' .
-            escapeshellarg((string)$amountCents) . ' ' .
-            escapeshellarg($returnUrl) . ' 2>&1';
-
-        $checkoutOutput = [];
-        $checkoutReturnVar = 1;
-        exec($checkoutCmd, $checkoutOutput, $checkoutReturnVar);
-
-        $paymentUrl = '';
-        if (!empty($checkoutOutput)) {
-            $paymentUrl = trim(end($checkoutOutput));
-        }
-
-        $logLines[] = 'checkout_command=' . $checkoutCmd;
-        $logLines[] = 'checkout_return_code=' . $checkoutReturnVar;
-        $logLines[] = 'checkout_output:';
-        $logLines[] = implode(PHP_EOL, $checkoutOutput);
-
-        if ($checkoutReturnVar !== 0 || $paymentUrl === '' || strpos($paymentUrl, 'https://') !== 0) {
-            $logLines[] = '';
-            file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL, FILE_APPEND);
-
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'The QR payment link could not be generated.',
-                'log' => implode("\n", $checkoutOutput),
-            ]);
-            exit;
-        }
-
-        $jobData = json_encode([
-            'filename' => $filename,
-            'copies' => $copies,
-            'printed' => false,
-            'paid' => false,
-            'created_at' => date('c'),
-        ], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
-
-        $jobWriteResult = file_put_contents($jobFile, $jobData);
-
-        $logLines[] = 'job_file=' . $jobFile;
-        $logLines[] = 'job_write_result=' . var_export($jobWriteResult, true);
-        $logLines[] = 'payment_url=' . $paymentUrl;
-
-        if ($paymentMode === 'qr') {
-            $logLines[] = '';
-            file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL, FILE_APPEND);
-
-            echo json_encode([
-                'status' => 'qr',
-                'payment_url' => $paymentUrl,
-                'message' => 'QR payment ready',
-            ]);
-            exit;
-        }
-
-        if ($readerId === '') {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'SumUp Reader ID missing',
-            ]);
-            exit;
-        }
-
-        if ($affiliateKey === '') {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'SumUp Affiliate Key missing',
-            ]);
-            exit;
-        }
-
-        if (!is_file($soloScript)) {
-            http_response_code(500);
-            echo json_encode([
-                'status' => 'error',
-                'error' => 'sumup_solo.py not found',
-            ]);
-            exit;
-        }
-
+    if ($usesTerminal && !$terminalSynchronous) {
         $soloCmd = 'nohup ' .
             escapeshellcmd($python) . ' ' .
             escapeshellarg($soloScript) . ' ' .
@@ -396,18 +369,69 @@ try {
             ' >> ' . escapeshellarg($soloBgLog) . ' 2>&1 &';
 
         exec($soloCmd);
-
         $logLines[] = 'solo_background_command=' . $soloCmd;
-        $logLines[] = '';
+    }
 
-        file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL, FILE_APPEND);
+    $writeLog($logFile, $logLines);
 
-        echo json_encode([
-            'status' => 'both',
-            'payment_url' => $paymentUrl,
-            'message' => 'QR payment ready, Terminal started in background',
-        ]);
-        exit;
+    switch ($paymentMode) {
+        case 'coin':
+            echo json_encode([
+                'status' => 'coin',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'message' => 'Coin payment ready',
+            ]);
+            exit;
+
+        case 'qr':
+            echo json_encode([
+                'status' => 'qr',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'payment_url' => $paymentUrl,
+                'message' => 'QR payment ready',
+            ]);
+            exit;
+
+        case 'terminal_qr':
+            echo json_encode([
+                'status' => 'both',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'payment_url' => $paymentUrl,
+                'message' => 'QR payment ready, Terminal started in background',
+            ]);
+            exit;
+
+        case 'terminal_coin':
+            echo json_encode([
+                'status' => 'coin',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'message' => 'Coin payment ready, Terminal started in background',
+            ]);
+            exit;
+
+        case 'qr_coin':
+            echo json_encode([
+                'status' => 'qr',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'payment_url' => $paymentUrl,
+                'message' => 'QR payment ready, Coin enabled',
+            ]);
+            exit;
+
+        case 'terminal_qr_coin':
+            echo json_encode([
+                'status' => 'both',
+                'provider' => $provider,
+                'payment_mode' => $paymentMode,
+                'payment_url' => $paymentUrl,
+                'message' => 'QR payment ready, Terminal started in background, Coin enabled',
+            ]);
+            exit;
     }
 
     http_response_code(500);
