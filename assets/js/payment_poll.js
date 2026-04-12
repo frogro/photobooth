@@ -15,8 +15,8 @@
                     if (data.paid && data.printed) {
                         stopPolling();
 
-                        if (typeof photoboothTools !== 'undefined') {
-                            photoboothTools.isPrinting = false;
+                        if (typeof window.photoboothTools !== 'undefined') {
+                            window.photoboothTools.isPrinting = false;
                         }
 
                         const overlay = document.querySelector('.overlay');
