@@ -2266,19 +2266,25 @@ return [
             'options' => [
                 'none' => 'None',
                 'sumup' => 'SumUp',
+                'coin' => 'Münzprüfer',
+                'sumup_coin' => 'SumUp + Münzprüfer',
             ],
             'value' => $config['payments']['provider'] ?? 'none',
         ],
-        'payments_display_mode' => [
+        'payments_payment_mode' => [
             'view' => 'basic',
             'type' => 'select',
-            'name' => 'payments[display_mode]',
+            'name' => 'payments[payment_mode]',
             'options' => [
-                'solo' => 'Nur Terminal',
+                'terminal' => 'Nur Terminal',
                 'qr' => 'Nur QR-Code',
-                'both' => 'Terminal + QR-Code',
+                'coin' => 'Nur Münzprüfer',
+                'terminal_qr' => 'Terminal + QR-Code',
+                'terminal_coin' => 'Terminal + Münzprüfer',
+                'qr_coin' => 'QR-Code + Münzprüfer',
+                'terminal_qr_coin' => 'Terminal + QR-Code + Münzprüfer',
             ],
-            'value' => $config['payments']['display_mode'] ?? 'solo',
+            'value' => $config['payments']['payment_mode'] ?? 'terminal',
         ],
         'payments_webhook_url' => [
             'view' => 'basic',
@@ -2316,6 +2322,20 @@ return [
             'name' => 'payments[timeout]',
             'placeholder' => '60',
             'value' => $config['payments']['timeout'] ?? 60,
+        ],
+        'payments_coin_pico_url' => [
+            'view' => 'basic',
+            'type' => 'input',
+            'name' => 'payments[coin][pico_url]',
+            'placeholder' => 'http://192.168.178.77/start-payment',
+            'value' => $config['payments']['coin']['pico_url'] ?? '',
+        ],
+        'payments_coin_secret' => [
+            'view' => 'basic',
+            'type' => 'input',
+            'name' => 'payments[coin][secret]',
+            'placeholder' => 'shared-secret',
+            'value' => $config['payments']['coin']['secret'] ?? '',
         ],
         'payments_sumup_merchant' => [
             'view' => 'basic',
