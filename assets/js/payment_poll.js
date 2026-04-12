@@ -1,3 +1,5 @@
+// FIXED payment_poll.js
+
 (function () {
     let pollTimer = null;
 
@@ -10,26 +12,13 @@
                 method: 'GET',
                 dataType: 'json',
                 success: function (data) {
-                    console.log('Payment poll:', data);
-
                     if (data.paid && data.printed) {
                         stopPolling();
 
                         if (typeof window.photoboothTools !== 'undefined') {
                             window.photoboothTools.isPrinting = false;
                         }
-
-                        const overlay = document.querySelector('.overlay');
-                        if (overlay) {
-                            overlay.innerHTML = '✅ Zahlung erfolgreich – Druck abgeschlossen';
-                            setTimeout(() => {
-                                overlay.remove();
-                            }, 1200);
-                        }
                     }
-                },
-                error: function (xhr, status, err) {
-                    console.log('Payment poll failed:', status, err);
                 }
             });
         }, 2000);
@@ -45,9 +34,7 @@
     const observer = new MutationObserver(() => {
         const overlay = document.querySelector('.overlay');
 
-        if (!overlay) {
-            return;
-        }
+        if (!overlay) return;
 
         if (
             overlay.classList.contains('overlay-qr') ||
