@@ -33,12 +33,24 @@ try {
     }
 
     $provider = trim((string)($config['payments']['provider'] ?? 'none'));
-    $displayMode = trim((string)($config['payments']['display_mode'] ?? 'solo'));
+    $paymentMode = trim((string)($config['payments']['payment_mode'] ?? ''));
+    $legacyDisplayMode = trim((string)($config['payments']['display_mode'] ?? 'solo'));
     $webhookUrl = rtrim(trim((string)($config['payments']['webhook_url'] ?? '')), '/');
+
+    if ($paymentMode === '') {
+        $paymentMode = match ($legacyDisplayMode) {
+            'qr' => 'qr',
+            'both' => 'terminal_qr',
+            default => 'terminal',
+        };
+    }
 
     $merchantCode = trim((string)($config['payments']['sumup']['merchant_code'] ?? ''));
     $readerId = trim((string)($config['payments']['sumup']['reader_id'] ?? ''));
     $affiliateKey = trim((string)($config['payments']['sumup']['affiliate_key'] ?? ''));
+
+    $coinPicoUrl = rtrim(trim((string)($config['payments']['coin']['pico_url'] ?? '')), '/');
+    $coinSecret = trim((string)($config['payments']['coin']['secret'] ?? ''));
 
     $amountCentsRaw = $config['payments']['price_cents'] ?? 0;
     $amountCents = (int)$amountCentsRaw;
@@ -50,34 +62,31 @@ try {
     $logFile = PathUtility::getAbsolutePath('private/payment-print.log');
     $jobFile = PathUtility::getAbsolutePath('private/photobooth_current_print.json');
     $soloBgLog = '/tmp/sumup_solo_both.log';
+    $paymentMessageTemplate = trim((string)($config['payments']['message'] ?? 'Bitte zahlen Sie %price% €'));
+    $formattedPrice = number_format($amountCents / 100, 2, '.', '');
+    $coinStartMessage = str_replace('%price%', $formattedPrice, $paymentMessageTemplate);
 
     $logLines = [
         '[' . date('c') . '] startPaymentPrint',
         'filename=' . $filename,
         'copies=' . $copies,
         'provider=' . $provider,
-        'display_mode=' . $displayMode,
+        'payment_mode=' . $paymentMode,
+        'legacy_display_mode=' . $legacyDisplayMode,
         'merchant_code=' . $merchantCode,
         'reader_id=' . $readerId,
         'affiliate_key_present=' . ($affiliateKey !== '' ? 'yes' : 'no'),
         'amount_cents=' . $amountCents,
         'webhook_url=' . $webhookUrl,
+        'coin_pico_url=' . $coinPicoUrl,
+        'coin_secret_present=' . ($coinSecret !== '' ? 'yes' : 'no'),
     ];
 
-    if ($provider !== 'sumup') {
+    if (!in_array($provider, ['sumup', 'coin', 'sumup_coin'], true)) {
         http_response_code(500);
         echo json_encode([
             'status' => 'error',
-            'error' => 'Payment provider is not SumUp',
-        ]);
-        exit;
-    }
-
-    if ($merchantCode === '') {
-        http_response_code(500);
-        echo json_encode([
-            'status' => 'error',
-            'error' => 'SumUp Merchant Code missing',
+            'error' => 'Unsupported payment provider',
         ]);
         exit;
     }
@@ -91,7 +100,123 @@ try {
         exit;
     }
 
-    if ($displayMode === 'solo') {
+    if ($paymentMode === 'coin') {
+        if (!in_array($provider, ['coin', 'sumup_coin'], true)) {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'Payment provider does not allow coin mode',
+            ]);
+            exit;
+        }
+
+        if ($coinPicoUrl === '') {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'Coin Pico URL missing',
+            ]);
+            exit;
+        }
+
+        if ($coinSecret === '') {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'Coin secret missing',
+            ]);
+            exit;
+        }
+
+        $jobData = json_encode([
+            'filename' => $filename,
+            'copies' => $copies,
+            'printed' => false,
+            'paid' => false,
+            'provider' => $provider,
+            'payment_mode' => $paymentMode,
+            'payment_channel' => 'coin',
+            'amount_cents_due' => $amountCents,
+            'amount_cents_received' => 0,
+            'created_at' => date('c'),
+        ], JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT);
+
+        $jobWriteResult = file_put_contents($jobFile, $jobData);
+
+        $coinPayload = json_encode([
+            'secret' => $coinSecret,
+            'amount_cents' => $amountCents,
+            'message' => $coinStartMessage,
+        ], JSON_UNESCAPED_SLASHES);
+
+        $coinContext = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/json\r\n",
+                'content' => $coinPayload,
+                'timeout' => 5,
+                'ignore_errors' => true,
+            ],
+        ]);
+
+        $coinResponse = @file_get_contents($coinPicoUrl, false, $coinContext);
+        $httpStatusLine = $http_response_header[0] ?? '';
+        $coinStartOk = is_string($httpStatusLine) && preg_match('/\s2\d\d\s/', $httpStatusLine) === 1;
+
+        $logLines[] = 'job_file=' . $jobFile;
+        $logLines[] = 'job_write_result=' . var_export($jobWriteResult, true);
+        $logLines[] = 'coin_request_url=' . $coinPicoUrl;
+        $logLines[] = 'coin_request_payload=' . $coinPayload;
+        $logLines[] = 'coin_response_status=' . $httpStatusLine;
+        $logLines[] = 'coin_response_body=' . (is_string($coinResponse) ? $coinResponse : '');
+
+        file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL . PHP_EOL, FILE_APPEND);
+
+        if (!$coinStartOk) {
+            http_response_code(500);
+            echo json_encode([
+                'status' => 'error',
+                'error' => 'Coin payment could not be started',
+                'details' => is_string($coinResponse) ? $coinResponse : '',
+            ]);
+            exit;
+        }
+
+        echo json_encode([
+            'status' => 'coin',
+            'message' => 'Coin payment ready',
+        ]);
+        exit;
+    }
+
+    if (!in_array($paymentMode, ['terminal', 'qr', 'terminal_qr'], true)) {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment mode not yet implemented',
+        ]);
+        exit;
+    }
+
+    if ($provider !== 'sumup' && $provider !== 'sumup_coin') {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'Payment provider is not compatible with SumUp mode',
+        ]);
+        exit;
+    }
+
+    if ($merchantCode === '') {
+        http_response_code(500);
+        echo json_encode([
+            'status' => 'error',
+            'error' => 'SumUp Merchant Code missing',
+        ]);
+        exit;
+    }
+
+    if ($paymentMode === 'terminal') {
         if ($readerId === '') {
             http_response_code(500);
             echo json_encode([
@@ -154,7 +279,7 @@ try {
         exit;
     }
 
-    if ($displayMode === 'qr' || $displayMode === 'both') {
+    if ($paymentMode === 'qr' || $paymentMode === 'terminal_qr') {
         if ($webhookUrl === '') {
             http_response_code(500);
             echo json_encode([
@@ -222,7 +347,7 @@ try {
         $logLines[] = 'job_write_result=' . var_export($jobWriteResult, true);
         $logLines[] = 'payment_url=' . $paymentUrl;
 
-        if ($displayMode === 'qr') {
+        if ($paymentMode === 'qr') {
             $logLines[] = '';
             file_put_contents($logFile, implode(PHP_EOL, $logLines) . PHP_EOL, FILE_APPEND);
 
