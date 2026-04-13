@@ -8,6 +8,31 @@
 wget https://raw.githubusercontent.com/frogro/photobooth/sumup-coin-full/install-photobooth-payment.sh
 sudo bash install-photobooth-payment.sh
 ```
+
+**Setup Requirements:**
+- **SumUp:** Secret API Key and Affiliate Key required. Solo Terminal needs to be linked via Cloud API.
+- **Ngrok:** Provides a secure tunnel for the SumUp Webhook to reach the local Photobooth.
+- **Gunicorn:** Runs the Python webhook listener as a background service.
+
+
+#### 1.) Create a free SumUp account and API access token
+
+> Settings > For Developers > API Key (secret.txt) + > Settings > For Developers > Affiliate Key; optionally, link Solo under Cloud API
+
+#### 2. Create a free ngrok account
+
+Set up an ngrok authoring token / note the dev domain (it should be an fixed IP - maybe it will be offered to you later)
+
+`ngrok config add-authtoken YOUR_TOKEN`
+
+#### 3. Start the tunnel (only required for QR code payment)
+
+`ngrok http --url=myurl.ngrok-free.app 5000`
+
+#### 4. Start guinicorn (only required for QR code payment)
+
+`cd /var/www/html/api`
+`sudo -u www-data gunicorn -w 2 -b 127.0.0.1:5000 webhook_sumup:app` 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 A Photobooth web interface for Linux and Windows (often also called a "photo box" in some languages/regions).
