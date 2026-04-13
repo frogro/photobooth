@@ -34,6 +34,15 @@ Set up an ngrok authoring token / note the dev domain (it should be an fixed IP 
 `cd /var/www/html/api`
 `sudo -u www-data gunicorn -w 2 -b 127.0.0.1:5000 webhook_sumup:app` 
 
+**Setup Requirements for Coin Selctor Payment:**
+
+For further information to hardware requirmenets see the coins folder in this repo.
+
+#### Start the Flask coin selector proxy server
+
+`cd /var/www/html/api`
+`sudo -u www-data env COIN_SECRET='shared-secret' python3 coin_proxy.py`
+
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
 A Photobooth web interface for Linux and Windows (often also called a "photo box" in some languages/regions).
