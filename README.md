@@ -41,6 +41,7 @@ For further information to hardware requirmenets see the coin folder in this rep
 #### Start the Flask coin selector proxy server
 
 `cd /var/www/html/api`
+
 `sudo -u www-data env COIN_SECRET='shared-secret' python3 coin_proxy.py`
 
 ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
