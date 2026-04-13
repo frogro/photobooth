@@ -81,7 +81,9 @@ Der Münzprüfer muss im Impuls-Modus konfiguriert werden.
 
 Der enthaltene Code für den Pico W basiert auf Adafruit Circuit Python. Dieses muss zunächst installiert werden: 
 
-`https://circuitpython.org/board/raspberry_pi_pico_w/`
+```bash
+https://circuitpython.org/board/raspberry_pi_pico_w/
+```
 
 Anschließend den kompletten Inhalt aus dem Ordner picow auf das CIRCUITPY-Laufwerk kopieren. 
 Die settings.toml anpassen!!!
