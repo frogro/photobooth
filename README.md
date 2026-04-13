@@ -1,4 +1,4 @@
-# Photobooth v4 | Feature: Sumup Pay-per-Print Integration (Solo Terminal & QR Code) + Multi Coin Selector Paymnet 
+# Photobooth v4 | Feature: Sumup Pay-per-Print Integration (Solo Terminal & QR Code) + Multi Coin Selector Payment 
 
 ![](resources/img/logo/banner.png)
 
