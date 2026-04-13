@@ -36,7 +36,7 @@ Set up an ngrok authoring token / note the dev domain (it should be an fixed IP 
 
 **Setup Requirements for Coin Selctor Payment:**
 
-For further information to hardware requirmenets see the coins folder in this repo.
+For further information to hardware requirmenets see the coin folder in this repo.
 
 #### Start the Flask coin selector proxy server
 
