@@ -1,4 +1,4 @@
-# Photobooth Controller Setup (Pico W & HX-916)
+# Photobooth Münzprüfer Setup (Pico W & HX-916)
 
 Diese Dokumentation beschreibt die Einrichtung des Raspberry Pi Pico W als Steuerungs-Einheit für ein Münzzahlsystem in einer Photobooth, inklusive der Anbindung an einen Proxy-Server.
 
