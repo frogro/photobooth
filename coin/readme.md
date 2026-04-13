@@ -44,7 +44,7 @@ Der Münzprüfer muss im Impuls-Modus konfiguriert werden.
 ## 3. Vollständiger Verkabelungsplan
 
 ### A. Stromversorgung (12V zu 5V)
-* **12V Netzteil (+)** an Münzprüfer (12V Rot) **UND** Step-Down Converter **IN+**.
+* **12V Netzteil (+)** an Münzprüfer (12V Rot) **UND** Step-Down Converter **IN+** **UND** Optokoppler Eingang **1+**.
 * **12V Netzteil (-)** an Münzprüfer (Schwarz) **UND** Step-Down Converter **IN-**.
 * **Step-Down OUT+** an Pico **VSYS (Pin 39)**. *(Zuvor stabil auf 5.0V einstellen!)*
 * **Step-Down OUT-** an Pico **GND**.
