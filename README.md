@@ -6,7 +6,8 @@ Installation:
 
 ```bash
 wget https://raw.githubusercontent.com/frogro/photobooth/sumup-coin-full/install-photobooth-payment.sh
-sudo bash install-photobooth-payment.sh```
+sudo bash install-photobooth-payment.sh
+```
 
 A Photobooth web interface for Linux and Windows (often also called a "photo box" in some languages/regions).
 
