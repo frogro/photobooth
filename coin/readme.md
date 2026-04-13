@@ -76,3 +76,14 @@ Der Münzprüfer muss im Impuls-Modus konfiguriert werden.
 1.  **GND-Sternpunkt:** Alle Massen (Netzteil, Step-Down, Pico, LCD, Taster, Optokoppler-Ausgang) müssen zwingend miteinander verbunden sein.
 2.  **Spannungsprüfung:** Die Ausgangsspannung des Step-Down Converters muss mit einem Multimeter geprüft werden, **bevor** er an den Pico angeschlossen wird (exakt 5.0V).
 3.  **3.3V Schutz:** Verbinde niemals das weiße COIN-Kabel des Münzprüfers direkt mit dem Pico. Der Pico verträgt an seinen Pins nur 3.3V. Der Optokoppler schützt den Controller vor den 12V-Signalen.
+
+## 5. Code.py
+
+Der enthaltene Code für den Pico W basiert auf Adafruit Circuit Python. Dieses muss zunächst installiert werden: 
+
+`https://circuitpython.org/board/raspberry_pi_pico_w/`
+
+Anschließend den kompletten Inhalt aus dem Ordner picow auf das CIRCUITPY-Laufwerk kopieren. 
+Die settings.toml anpassen!!!
+
+
