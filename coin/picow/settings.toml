@@ -1,0 +1,5 @@
+CIRCUITPY_WIFI_SSID="myssid"
+CIRCUITPY_WIFI_PASSWORD="mypassword"
+COIN_PROXY_URL="http://myphotoboothurl:8081/coin-paid"
+CANCEL_PAYMENT_URL="http://myphotoboothurl/api/cancelPayment.php"
+COIN_SECRET="shared-secret"
