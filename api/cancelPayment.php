@@ -13,8 +13,6 @@ $jobFile = PathUtility::getAbsolutePath('private/photobooth_current_print.json')
 if (!is_file($jobFile)) {
     echo json_encode([
         'status' => 'missing',
-        'paid' => false,
-        'printed' => false,
         'cancelled' => false,
     ]);
     exit;
@@ -23,22 +21,34 @@ if (!is_file($jobFile)) {
 $data = json_decode((string)file_get_contents($jobFile), true);
 
 if (!is_array($data)) {
+    http_response_code(500);
     echo json_encode([
         'status' => 'invalid',
-        'paid' => false,
-        'printed' => false,
+        'cancelled' => false,
+    ]);
+    exit;
+}
+
+$data['paid'] = false;
+$data['printed'] = false;
+$data['cancelled'] = true;
+$data['cancelled_at'] = date('c');
+
+$result = file_put_contents(
+    $jobFile,
+    json_encode($data, JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT)
+);
+
+if ($result === false) {
+    http_response_code(500);
+    echo json_encode([
+        'status' => 'error',
         'cancelled' => false,
     ]);
     exit;
 }
 
 echo json_encode([
-    'status' => 'ok',
-    'paid' => (bool)($data['paid'] ?? false),
-    'printed' => (bool)($data['printed'] ?? false),
-    'cancelled' => (bool)($data['cancelled'] ?? false),
-    'filename' => (string)($data['filename'] ?? ''),
-    'provider' => (string)($data['provider'] ?? ''),
-    'payment_mode' => (string)($data['payment_mode'] ?? ''),
-    'created_at' => (string)($data['created_at'] ?? ''),
+    'status' => 'cancelled',
+    'cancelled' => true,
 ]);

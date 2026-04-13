@@ -54,10 +54,6 @@ try {
 
     $amountCentsRaw = $config['payments']['price_cents'] ?? 0;
     $amountCents = (int)$amountCentsRaw;
-    $paymentTimeoutSeconds = (int)($config['payments']['timeout'] ?? 60);
-    if ($paymentTimeoutSeconds <= 0) {
-        $paymentTimeoutSeconds = 60;
-    }
 
     $python = '/usr/bin/python3';
     $soloScript = PathUtility::getAbsolutePath('api/sumup_solo.py');
@@ -81,7 +77,6 @@ try {
         'reader_id=' . $readerId,
         'affiliate_key_present=' . ($affiliateKey !== '' ? 'yes' : 'no'),
         'amount_cents=' . $amountCents,
-        'payment_timeout_seconds=' . $paymentTimeoutSeconds,
         'webhook_url=' . $webhookUrl,
         'coin_pico_url=' . $coinPicoUrl,
         'coin_secret_present=' . ($coinSecret !== '' ? 'yes' : 'no'),
@@ -329,7 +324,6 @@ try {
             'secret' => $coinSecret,
             'amount_cents' => $amountCents,
             'message' => $coinStartMessage,
-            'timeout' => $paymentTimeoutSeconds,
         ], JSON_UNESCAPED_SLASHES);
 
         $coinContext = stream_context_create([

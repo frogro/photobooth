@@ -15,7 +15,6 @@ if (!is_file($jobFile)) {
         'status' => 'missing',
         'paid' => false,
         'printed' => false,
-        'cancelled' => false,
     ]);
     exit;
 }
@@ -27,7 +26,6 @@ if (!is_array($data)) {
         'status' => 'invalid',
         'paid' => false,
         'printed' => false,
-        'cancelled' => false,
     ]);
     exit;
 }
@@ -36,9 +34,5 @@ echo json_encode([
     'status' => 'ok',
     'paid' => (bool)($data['paid'] ?? false),
     'printed' => (bool)($data['printed'] ?? false),
-    'cancelled' => (bool)($data['cancelled'] ?? false),
     'filename' => (string)($data['filename'] ?? ''),
-    'provider' => (string)($data['provider'] ?? ''),
-    'payment_mode' => (string)($data['payment_mode'] ?? ''),
-    'created_at' => (string)($data['created_at'] ?? ''),
 ]);
